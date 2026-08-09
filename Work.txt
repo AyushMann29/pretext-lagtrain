@@ -1,0 +1,11 @@
+REFERENCE TO USE:
+Pretext bad apple: https://github.com/frmlinn/bad-apple-pretext
+
+English lyrics: Eng lyrics.txt (white)
+Japanese lyrics: Jap lyrics.txt (black)
+
+video to ascii: main.py
+song: song.mp3
+video: song.mp4
+
+Goal: want to create a pretext making video of the lagtrain song as the person in pretext bad apple made. 
