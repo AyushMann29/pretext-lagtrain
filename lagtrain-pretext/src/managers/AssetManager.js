@@ -6,32 +6,42 @@ export class AssetManager {
     this.rawTextJP = '';
     this.uint16Data = null;
     this.frameOffsets = [];
-    
+
     this.isLittleEndian = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
   }
 
-  async loadAll(onProgress, onReady) {
+  async loadSong(songId, onProgress, onReady) {
+    const song = CONF.SONGS[songId] || CONF.SONGS.song1;
+
+    this.rawTextEN = '';
+    this.rawTextJP = '';
+    this.uint16Data = null;
+    this.frameOffsets = [];
+
     try {
       const [resEN, resJP] = await Promise.all([
-        fetch('lyrics_en.txt'),
-        fetch('lyrics_jp.txt')
+        fetch(song.lyricsEN),
+        fetch(song.lyricsJP)
       ]);
 
-      if (!resEN.ok || !resJP.ok) throw new Error("Failed to load text assets");
+      if (!resEN.ok || !resJP.ok) throw new Error(`Failed to load text assets for ${songId}`);
 
       this.rawTextEN = await resEN.text();
       this.rawTextJP = new TextDecoder('utf-8').decode(await resJP.arrayBuffer());
 
-      const resBin = await fetch('frames.bin');
-      if (!resBin.ok) throw new Error(`HTTP Error: ${resBin.status} on frames.bin`);
+      const resBin = await fetch(song.frames);
+      if (!resBin.ok) throw new Error(`HTTP Error: ${resBin.status} on ${song.frames}`);
 
       const contentLength = parseInt(resBin.headers.get('content-length'), 10) || (5 * 1024 * 1024);
-      
       await this.loadStream(resBin, contentLength, onProgress, onReady);
     } catch (error) {
       console.error("Asset Load Aborted:", error);
       throw error;
     }
+  }
+
+  async loadAll(onProgress, onReady) {
+    return this.loadSong('song1', onProgress, onReady);
   }
 
   async loadStream(resBin, initialLength, onProgress, onReady) {
