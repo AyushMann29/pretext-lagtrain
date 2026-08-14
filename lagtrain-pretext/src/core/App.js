@@ -10,30 +10,29 @@ export class App {
     this.audio = null;
     this.ui = null;
     this.renderer = null;
-    
+    this.activeSongId = 'song1';
+
     this.lastRenderedFrame = -1;
     this.isBuffering = false;
-    
+
     this.animationFrameId = null;
     this.isStarting = false;
-    
+
     this.renderLoop = this.renderLoop.bind(this);
   }
 
   init() {
     try {
+      const songIds = Object.keys(CONF.SONGS);
       this.ui = new UIManager({
         onPlay: () => this.startPlaying(),
         onReset: () => this.resetSimulation(),
         onResize: () => this.handleResize(),
-        onCanvasClick: () => this.togglePlay()
+        onCanvasClick: () => this.togglePlay(),
+        onSongChange: (songId) => this.switchSong(songId)
       });
-
-      this.assets.loadAll(
-        (progress) => this.ui.updateProgress(progress),
-        () => this.onAssetsReady()
-      );
-
+      this.ui.setupSongOptions(songIds, this.activeSongId);
+      this.loadSong(this.activeSongId);
     } catch (error) {
       const errEl = document.getElementById('loading');
       if (errEl) errEl.innerText = "Error loading resources";
@@ -41,22 +40,50 @@ export class App {
     }
   }
 
-  onAssetsReady() {
-    this.audio = new AudioManager(() => {
-      this.ui.showUIOnEnd();
-      this.lastRenderedFrame = -1;
-      if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
-    });
+  async loadSong(songId) {
+    const song = CONF.SONGS[songId] || CONF.SONGS.song1;
+    this.activeSongId = song.id;
+    this.ui.setSongSelection(song.id);
 
-    this.renderer = new Renderer(document.getElementById('canvas'), this.assets);
+    this.isBuffering = false;
+    this.lastRenderedFrame = -1;
+    if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
+
+    const onProgress = (progress) => this.ui.updateProgress(progress);
+    const onReady = () => this.onAssetsReady(song.id);
+
+    this.assets.loadSong(song.id, onProgress, onReady);
+  }
+
+  onAssetsReady(songId) {
+    const song = CONF.SONGS[songId] || CONF.SONGS.song1;
+
+    if (!this.audio) {
+      this.audio = new AudioManager(song.audio, () => {
+        this.ui.showUIOnEnd();
+        this.ui.showSceneSelector();
+        this.lastRenderedFrame = -1;
+        if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
+      });
+    } else {
+      this.audio.setTrack(song.audio);
+    }
+
+    if (!this.renderer) {
+      this.renderer = new Renderer(document.getElementById('canvas'), this.assets);
+    } else {
+      this.renderer.assets = this.assets;
+    }
+
     this.renderer.handleResize();
-    
     this.ui.showReadyState();
+    this.ui.showSceneSelector();
 
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.audio && this.audio.isPlaying) {
         this.audio.pause();
         this.ui.showReadyState();
+        this.ui.showSceneSelector();
         if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
       }
     });
@@ -71,18 +98,27 @@ export class App {
     }
   }
 
+  async switchSong(songId) {
+    if (!songId || songId === this.activeSongId) return;
+
+    this.audio?.pause();
+    this.ui.showReadyState();
+    this.loadSong(songId);
+  }
+
   async startPlaying() {
     if (!this.audio || this.isStarting) return;
-    
+
     this.isStarting = true;
+    this.ui.hideSceneSelector();
 
     if (await this.audio.play()) {
       this.ui.hideUIForPlayback();
-      
+
       if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = requestAnimationFrame(this.renderLoop);
     }
-    
+
     this.isStarting = false;
   }
 
@@ -91,6 +127,7 @@ export class App {
     if (this.audio.isPlaying) {
       this.audio.pause();
       this.ui.showReadyState();
+      this.ui.showSceneSelector();
       if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
     } else {
       this.startPlaying();
@@ -102,17 +139,18 @@ export class App {
     this.audio.reset();
     this.lastRenderedFrame = -1;
     this.isBuffering = false;
-    
+
     if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
     if (this.renderer) this.renderer.clearScreen();
     this.ui.showReadyState();
+    this.ui.showSceneSelector();
   }
 
   renderLoop() {
     if (!this.audio || !this.audio.isPlaying) return;
     
     const currentTime = this.audio.getCurrentTime();
-    const targetFrame = Math.floor(currentTime * CONF.FPS_VIDEO);
+    const targetFrame = Math.round(currentTime * CONF.FPS_VIDEO);
     const downloadedFrames = this.assets.frameOffsets.length;
 
     const duration = this.audio.audio.duration;

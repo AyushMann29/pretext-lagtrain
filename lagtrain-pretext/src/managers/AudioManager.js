@@ -1,13 +1,22 @@
 export class AudioManager {
-  constructor(onEndedCallback) {
-    this.audio = new Audio('song.mp3');
+  constructor(songPath, onEndedCallback) {
+    this.onEndedCallback = onEndedCallback;
+    this.audio = new Audio(songPath || 'song1.mp3');
     this.isPlaying = false;
 
     this.audio.addEventListener('ended', () => {
       this.isPlaying = false;
       this.audio.currentTime = 0;
-      if (onEndedCallback) onEndedCallback();
+      if (this.onEndedCallback) this.onEndedCallback();
     });
+  }
+
+  setTrack(songPath) {
+    this.pause();
+    this.audio.src = songPath || 'song1.mp3';
+    this.audio.load();
+    this.audio.currentTime = 0;
+    this.isPlaying = false;
   }
 
   async play() {
